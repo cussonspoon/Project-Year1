@@ -12,6 +12,8 @@ import psutil
 import pandas as pd
 import wmi
 import re
+import GPUtil
+import datetime
 
 
 
@@ -496,31 +498,14 @@ class TemperatureDisplay(SystemDisplayBase):
 
     def animate(self, i):
         self.temperature_x_vals.append(next(self.index))
-        try:
-            temperatures = psutil.sensors_temperatures()
-
-            if 'coretemp' in temperatures:
-                core_temp = temperatures['coretemp']
-                if core_temp:
-                    temperature = core_temp[0].current
-                    self.temperature_y_vals.append(temperature)
-                    self.ax.clear()
-                    self.ax.plot(self.temperature_x_vals, self.temperature_y_vals,color= "red")
-                    self.ax.set_xlabel("Time (s)")
-                    self.ax.set_ylabel("Temperature (°C)")
-                    self.temperature_info_label.config(text=f"CPU Temperature = {temperature}°C")
-                else:
-                    self.handle_sensor_data_unavailable()
-            else:
-                self.handle_sensor_data_unavailable()
-        except Exception as e:
-            self.handle_sensor_data_unavailable()
-
-    def handle_sensor_data_unavailable(self):
+        gpu = GPUtil.getGPUs()[0]
+        temp = gpu.temperature
+        self.temperature_y_vals.append(temp)
         self.ax.clear()
-        self.temperature_info_label.config(text="No CPU temperature data available on this platform\nNote: The program is using psutil.sensors_temperatures() \nwhich might not work on some platform like window.")
-        self.ax.axis('off')
-
+        self.ax.plot(self.temperature_x_vals, self.temperature_y_vals,color= "red")
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Temperature (°C)")
+        self.temperature_info_label.config(text=f"CPU Temperature = {temp}°C")
     def display(self):
         super().display()
         self.clear_frame()
@@ -532,6 +517,45 @@ class TemperatureDisplay(SystemDisplayBase):
         canvas_widget_temp.pack()
         self.temperature_info_label = Label(self.frame, text="", font=("Tahoma", 18),bg="Black", fg= "Green")
         self.temperature_info_label.pack()
+
+    # def animate(self, i):
+    #     self.temperature_x_vals.append(next(self.index))
+    #     try:
+    #         temperatures = psutil.sensors_temperatures()
+
+    #         if 'coretemp' in temperatures:
+    #             core_temp = temperatures['coretemp']
+    #             if core_temp:
+    #                 temperature = core_temp[0].current
+    #                 self.temperature_y_vals.append(temperature)
+    #                 self.ax.clear()
+    #                 self.ax.plot(self.temperature_x_vals, self.temperature_y_vals,color= "red")
+    #                 self.ax.set_xlabel("Time (s)")
+    #                 self.ax.set_ylabel("Temperature (°C)")
+    #                 self.temperature_info_label.config(text=f"CPU Temperature = {temperature}°C")
+    #             else:
+    #                 self.handle_sensor_data_unavailable()
+    #         else:
+    #             self.handle_sensor_data_unavailable()
+    #     except Exception as e:
+    #         self.handle_sensor_data_unavailable()
+
+    # def handle_sensor_data_unavailable(self):
+    #     self.ax.clear()
+    #     self.temperature_info_label.config(text="No CPU temperature data available on this platform\nNote: The program is using psutil.sensors_temperatures() \nwhich might not work on some platform like window.")
+    #     self.ax.axis('off')
+
+    # def display(self):
+    #     super().display()
+    #     self.clear_frame()
+    #     self.set_header("Temperature")
+    #     index = itertools.count()
+    #     self.ani = FuncAnimation(self.fig, self.animate, frames=index, interval=1000)
+    #     canvas_temp = FigureCanvasTkAgg(self.fig, master=self.frame)
+    #     canvas_widget_temp = canvas_temp.get_tk_widget()
+    #     canvas_widget_temp.pack()
+    #     self.temperature_info_label = Label(self.frame, text="", font=("Tahoma", 18),bg="Black", fg= "Green")
+    #     self.temperature_info_label.pack()
 
 
 #-----------------------------------------------------------------------------------------------------------------------------------
@@ -546,27 +570,31 @@ class BatteryDisplay(SystemDisplayBase):
     def animate(self, i):
         self.battery_x_vals.append(next(self.index))
         battery = psutil.sensors_battery()
-        if battery:
-            battery_percent = battery.percent
-            self.battery_y_vals.append(battery_percent)
-            self.ax.clear()
-            self.ax.plot(self.battery_x_vals, self.battery_y_vals,color= "red")
-            self.ax.set_xlabel("Time (s)")
-            self.ax.set_ylabel("Battery Status (%)")
-            self.battery_info_label.config(text=f"Battery Status = {battery_percent}%")
-        else:
-            self.handle_battery_data_unavailable()
-
-    def handle_battery_data_unavailable(self):
+        battery_percent = battery.percent
+        battery_left = battery.secsleft
+        self.battery_y_vals.append(battery_percent)
         self.ax.clear()
-        self.battery_info_label.config(text="No Battery data available on this platform\nNote: The program is using psutil.sensors_temperatures() \nwhich might not work on some platform like window.")
-        self.ax.axis('off')
+        self.ax.plot(self.battery_x_vals, self.battery_y_vals,color= "red")
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Battery Status (%)")
+        self.battery_info_label.config(text=f"Battery Status : {battery_percent}%\n Estimated time left : {self.convert_to_hour(battery_left)}\nPlugged status : {battery.power_plugged}")
+
+    def convert_to_hour(self, sec):
+        # Check if sec is not None and is a positive number
+        if sec is not None and sec > 0:
+            # Create a timedelta object with the given seconds
+            time_delta = datetime.timedelta(seconds=sec)
+            # Extract hours and minutes from the timedelta
+            hours, remainder = divmod(time_delta.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{hours} hours {minutes} minutes {seconds} seconds remaining"
+        else:
+            return "N/A"
 
     def display(self):
         super().display()
         self.clear_frame()
         self.set_header("Battery Status")
-
         index = itertools.count()
         self.ani = FuncAnimation(self.fig, self.animate, frames=index, interval=1000)
         canvas_battery = FigureCanvasTkAgg(self.fig, master=self.frame)
